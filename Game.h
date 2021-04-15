@@ -15,6 +15,7 @@
 #include "G8RTOS.h"
 #include "cc3100_usage.h"
 #include "LCDLib.h"
+#include "RGBLeds.h"
 
 
 /*********************************************** Includes ********************************************************************/
@@ -182,7 +183,7 @@ semaphore_t lcdSemaphore;
 semaphore_t ledSemaphore;
 
 GameState_t gameState;
-GeneralPlayerInfo_t playerInfo;
+//GeneralPlayerInfo_t playerInfo;
 SpecificPlayerInfo_t clientInfo;
 
 bool isHost;

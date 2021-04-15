@@ -19,7 +19,36 @@ void JoinGame()
     clientInfo.joined = true;
     clientInfo.acknowledge = false;
 
+    // send clientInfo to Host
+    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
+    // wait for server response
+    while(!gameState.player.acknowledge)
+    {
+        ReceiveData(&gameState, sizeof(gameState));
+        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+    }
+
+    // acknowledge when joined game
+    clientInfo.acknowledge = true;
+    // toggle red LED2
+    BITBAND_PERI(P2->OUT, 0) ^= 1; // red
+
+    // init board state, semaphores, thread
+    InitBoardState();
+
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+
+    G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
+    G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
+    G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
+    G8RTOS_AddThread(DrawObjects, 1, "drawObj");
+    G8RTOS_AddThread(MoveLEDs, 1, "leds");
+    G8RTOS_AddThread(IdleThread, 6, "idle");
+
+    G8RTOS_KillSelf();
 }
 
 /*
@@ -27,7 +56,13 @@ void JoinGame()
  */
 void ReceiveDataFromHost()
 {
-
+    while(1)
+    {
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+        //
+        G8RTOS_SignalSemaphore(&wifiSemaphore);
+        sleep(5);
+    }
 }
 
 /*
@@ -35,7 +70,13 @@ void ReceiveDataFromHost()
  */
 void SendDataToHost()
 {
-
+    while(1)
+    {
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+        G8RTOS_SignalSemaphore(&wifiSemaphore);
+        sleep(2);
+    }
 }
 
 /*
@@ -92,6 +133,11 @@ void CreateGame()
     P2->DIR |= BIT2;
     P2->OUT &= ~BIT2;
 
+    P2->SEL0 &= ~BIT0;  // red
+    P2->SEL1 &= ~BIT0;
+    P2->DIR |= BIT0;
+    P2->OUT &= ~BIT0;
+
     // init players
     isHost = false;
     isClient = false;
@@ -112,7 +158,7 @@ void CreateGame()
 
     // connect with client
 
-    // if connected, toggle
+    // if connected, toggle blue LED2
     BITBAND_PERI(P2->OUT, 2) ^= 1; // blue
 
     // init board (draw arena, players, scores)
