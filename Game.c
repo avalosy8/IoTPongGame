@@ -19,6 +19,8 @@ void JoinGame()
     clientInfo.joined = true;
     clientInfo.acknowledge = false;
 
+    gameState.player.acknowledge = false;
+
     // send clientInfo to Host
     SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
@@ -31,6 +33,12 @@ void JoinGame()
 
     // acknowledge when joined game
     clientInfo.acknowledge = true;
+    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
+    // wait for Client to receive from Host
+    while(ReceiveData(&gameState, sizeof(gameState)) < 0)
+        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
     // toggle red LED2
     BITBAND_PERI(P2->OUT, 0) ^= 1; // red
 
@@ -102,7 +110,40 @@ void ReadJoystickClient()
  */
 void EndOfGameClient()
 {
+    // wait for all semaphores
+    G8RTOS_WaitSemaphore(&ledSemaphore);
+    G8RTOS_WaitSemaphore(&wifiSemaphore);
+    G8RTOS_WaitSemaphore(&lcdSemaphore);
 
+    // kill all threads
+    // <-- to add
+
+    // clear screen with winner's color
+    if(gameState.winner == Client)
+        LCD_Clear(gameState.players[Client].color);
+    else if(gameState.winner == Host)
+        LCD_Clear(gameState.players[Host].color);
+
+    // wait for Host to restart game
+    while(gameState.gameDone == false)
+    {
+        ReceiveData(&gameState, sizeof(gameState));
+    }
+
+    // re-init semaphores
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+
+    // add all threads and reset game variables
+    G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
+    G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
+    G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
+    G8RTOS_AddThread(DrawObjects, 1, "drawObj");
+    G8RTOS_AddThread(MoveLEDs, 1, "leds");
+    G8RTOS_AddThread(IdleThread, 6, "idle");
+
+    G8RTOS_KillSelf();
 }
 
 /*********************************************** Client Threads *********************************************************************/
@@ -144,6 +185,39 @@ void InitPins()
     P2->OUT &= ~BIT0;
 }
 
+void InitGameVariablesHost()
+{
+    // Host variables
+    gameState.player.IP_address = HOST_IP_ADDR;
+    gameState.player.acknowledge = false;
+    gameState.player.displacement = 0;
+    gameState.player.joined = false;
+    gameState.player.playerNumber= Host;
+    gameState.player.ready = false;
+
+    // general player info
+    gameState.players[Host].color = PLAYER_BLUE;
+    gameState.players[Host].currentCenter = TOP_PLAYER_CENTER_Y;
+    gameState.players[Host].position = 0;
+    gameState.players[Client].color = PLAYER_RED;
+    gameState.players[Client].currentCenter = BOTTOM_PLAYER_CENTER_Y;
+    gameState.players[Client].position = 0;
+
+    // balls
+    int i;
+    for(i = 0; i < MAX_NUM_OF_BALLS; i++)
+        gameState.balls[i].alive = false;
+
+    // game variables
+    gameState.numberOfBalls = 0;
+    gameState.winner = false;
+    gameState.gameDone = false;
+    gameState.LEDScores[Host] = 0;
+    gameState.LEDScores[Client] = 0;
+    gameState.overallScores[Host] = 0;
+    gameState.overallScores[Client] = 0;
+}
+
 /*
  * Thread for the host to create a game, only thread for Host before launching OS
  */
@@ -168,18 +242,26 @@ void CreateGame()
 
     initCC3100(Host);
 
-    // try receiving packet from client
-    while(ReceiveData(&clientInfo, sizeof(clientInfo) < 0);
+    // wait for client to join, try receive packet from them
+    while(!clientInfo.joined)
+        ReceiveData(&clientInfo, sizeof(clientInfo));
 
-    // send ack to client
+    // send ack to client, wait for client to ack back
     gameState.player.acknowledge = true;
-    SendData(&gameState, gameState.IP_address, sizeof(gameState));
+    while(!clientInfo.acknowledge)
+    {
+        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
+        ReceiveData(&clientInfo, sizeof(clientInfo));
+    }
 
     // if connected, toggle blue LED2
     BITBAND_PERI(P2->OUT, 2) ^= 1; // blue
 
     // init board (draw arena, players, scores)
     InitBoardState();
+
+    // initializes game variables
+    InitGameVariablesHost();
 
     // init semaphores
     G8RTOS_InitSemaphore(&wifiSemaphore, 1);
@@ -322,7 +404,38 @@ void MoveBall()
  */
 void EndOfGameHost()
 {
+    // wait for all semaphores
+    G8RTOS_WaitSemaphore(&ledSemaphore);
+    G8RTOS_WaitSemaphore(&wifiSemaphore);
+    G8RTOS_WaitSemaphore(&lcdSemaphore);
 
+    // kill all threads
+    // <-- to add
+
+    // clear screen with winner's color
+    if(gameState.winner == Client)
+        LCD_Clear(gameState.players[Client].color);
+    else if(gameState.winner == Host)
+        LCD_Clear(gameState.players[Host].color);
+
+    // wait for Host action to restart game
+    while(1); // <-- to add
+
+    // re-init semaphores
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+
+    // add threads
+    G8RTOS_AddThread(GenerateBall, 2, "gen_ball");
+    G8RTOS_AddThread(DrawObjects, 2, "drawObj");
+    G8RTOS_AddThread(ReadJoystickHost, 2, "joystickH");
+    G8RTOS_AddThread(SendDataToClient, 2, "sendDataClient");
+    G8RTOS_AddThread(ReceiveDataFromClient, 2, "recvDataClient");
+    G8RTOS_AddThread(MoveLEDs, 2, "leds");
+    G8RTOS_AddThread(IdleThread, 6, "idle");
+
+    G8RTOS_KillSelf();
 }
 
 /*********************************************** Host Threads *********************************************************************/

@@ -155,7 +155,7 @@ typedef struct
     bool winner;
     bool gameDone;
     uint8_t LEDScores[2];
-    uint8_t overallScores[2];
+    uint8_t overallScores[2]; // scores once winner determined
 } GameState_t;
 #pragma pack ( pop )
 
@@ -311,6 +311,11 @@ void InitBoardState();
  * Initializes buttons and led pins
  */
 void InitPins();
+
+/*
+ * Initializes game variables on Host side
+ */
+void InitGameVariablesHost();
 
 /*********************************************** Public Functions *********************************************************************/
 
