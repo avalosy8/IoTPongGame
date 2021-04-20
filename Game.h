@@ -307,6 +307,11 @@ void UpdateBallOnScreen(PrevBall_t * previousBall, Ball_t * currentBall, uint16_
  */
 void InitBoardState();
 
+/*
+ * Initializes buttons and led pins
+ */
+void InitPins();
+
 /*********************************************** Public Functions *********************************************************************/
 
 

@@ -84,7 +84,17 @@ void SendDataToHost()
  */
 void ReadJoystickClient()
 {
+    int16_t x_coord = 0;
+    int16_t y_coord = 0;
+    while(1)
+    {
+        GetJoystickCoordinates(&x_coord, &y_coord);
 
+        // add offset, add displacement to self accordingly
+        // <-- to add
+
+        sleep(10);
+    }
 }
 
 /*
@@ -100,12 +110,7 @@ void EndOfGameClient()
 
 /*********************************************** Host Threads *********************************************************************/
 
-
-
-/*
- * Thread for the host to create a game, only thread for Host before launching OS
- */
-void CreateGame()
+void InitPins()
 {
     // B0 top button for host
     P4->DIR &= ~BIT4;       // set as input
@@ -137,12 +142,22 @@ void CreateGame()
     P2->SEL1 &= ~BIT0;
     P2->DIR |= BIT0;
     P2->OUT &= ~BIT0;
+}
+
+/*
+ * Thread for the host to create a game, only thread for Host before launching OS
+ */
+void CreateGame()
+{
+    InitPins();
 
     // init players
     isHost = false;
     isClient = false;
 
     LCD_Init(false);
+
+    LCD_Clear(LCD_BLACK);
 
     LCD_Text(100, 100, "Press a button to start!", LCD_ORANGE);
 
@@ -151,17 +166,34 @@ void CreateGame()
 
     LCD_Clear(LCD_BLACK);
 
-    // init semaphores
-    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
-    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
-    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+    initCC3100(Host);
 
-    // connect with client
+    // try receiving packet from client
+    while(ReceiveData(&clientInfo, sizeof(clientInfo) < 0);
+
+    // send ack to client
+    gameState.player.acknowledge = true;
+    SendData(&gameState, gameState.IP_address, sizeof(gameState));
 
     // if connected, toggle blue LED2
     BITBAND_PERI(P2->OUT, 2) ^= 1; // blue
 
     // init board (draw arena, players, scores)
+    InitBoardState();
+
+    // init semaphores
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+
+    // add threads
+    G8RTOS_AddThread(GenerateBall, 2, "gen_ball");
+    G8RTOS_AddThread(DrawObjects, 2, "drawObj");
+    G8RTOS_AddThread(ReadJoystickHost, 2, "joystickH");
+    G8RTOS_AddThread(SendDataToClient, 2, "sendDataClient");
+    G8RTOS_AddThread(ReceiveDataFromClient, 2, "recvDataClient");
+    G8RTOS_AddThread(MoveLEDs, 2, "leds");
+    G8RTOS_AddThread(IdleThread, 6, "idle");
 
     G8RTOS_KillSelf();
 }
@@ -200,7 +232,25 @@ void PORT5_IRQHandler(void)
  */
 void SendDataToClient()
 {
+    while(1)
+    {
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
+        G8RTOS_SignalSemaphore(&wifiSemaphore);
 
+        // check if game is done
+        if((gameState.LEDScores[Client] >= 8) || (gameState.LEDScores[Host] >= 8))
+        {
+            gameState.gameDone = true;
+            if(gameState.LEDScores[Host] >= 8)
+                gameState.winner = Host;
+            else
+                gameState.winner = Client;
+            G8RTOS_AddThread(EndOfGameHost, 1, "endHost");
+        }
+
+        sleep(5);
+    }
 }
 
 /*
@@ -208,7 +258,26 @@ void SendDataToClient()
  */
 void ReceiveDataFromClient()
 {
+    while(1)
+    {
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+        // keep receiving if retVal not > 0
+        if(!(ReceiveData(&clientInfo, sizeof(clientInfo)) > 0))
+        {
+            G8RTOS_SignalSemaphore(&wifiSemaphore);
+            sleep(1);
+        }
+        // update displacement if received client packet, check for paddle out of bounds
+        else
+        {
+            G8RTOS_SignalSemaphore(&wifiSemaphore);
 
+            // update player's curr center with displacement from client
+            // <-- to add
+
+            sleep(2);
+        }
+    }
 }
 
 /*
@@ -224,7 +293,20 @@ void GenerateBall()
  */
 void ReadJoystickHost()
 {
+    int16_t x_coord = 0;
+    int16_t y_coord = 0;
+    while(1)
+    {
+        GetJoystickCoordinates(&x_coord, &y_coord);
 
+        // change displacement
+        // <-- to add
+
+        sleep(10);
+
+        // then add to bottom player
+        // <-- to add
+    }
 }
 
 /*
