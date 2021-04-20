@@ -29,6 +29,9 @@
 /*********************************************** Global Defines ********************************************************************/
 #define MAX_NUM_OF_PLAYERS  2
 #define MAX_NUM_OF_BALLS    8
+#define BALL_SIZE           10
+#define PADDLE_LENGTH       20
+#define PADDLE_WIDTH        5
 
 // This game can actually be played with 4 players... a little bit more challenging, but doable! 
 #define NUM_OF_PLAYERS_PLAYING 2
@@ -316,6 +319,11 @@ void InitPins();
  * Initializes game variables on Host side
  */
 void InitGameVariablesHost();
+
+/*
+ * Thread that waits for button presses
+ */
+void waitStart();
 
 /*********************************************** Public Functions *********************************************************************/
 

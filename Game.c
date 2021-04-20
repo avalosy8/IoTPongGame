@@ -223,23 +223,6 @@ void InitGameVariablesHost()
  */
 void CreateGame()
 {
-    InitPins();
-
-    // init players
-    isHost = false;
-    isClient = false;
-
-    LCD_Init(false);
-
-    LCD_Clear(LCD_BLACK);
-
-    LCD_Text(100, 100, "Press a button to start!", LCD_ORANGE);
-
-    // wait for button presses
-    while(!(isHost | isClient));
-
-    LCD_Clear(LCD_BLACK);
-
     initCC3100(Host);
 
     // wait for client to join, try receive packet from them
@@ -514,14 +497,38 @@ void MoveLEDs()
 /*
  * Returns either Host or Client depending on button press
  */
-//playerType GetPlayerRole();
+playerType GetPlayerRole()
+{
+    InitPins();
+
+    // init players
+    isHost = false;
+    isClient = false;
+
+    LCD_Init(false);
+
+    LCD_Clear(LCD_BLACK);
+
+    LCD_Text(100, 100, "Press a button to start!", LCD_ORANGE);
+
+    // wait for button presses
+    while(!(isHost | isClient));
+
+    LCD_Clear(LCD_BLACK);
+
+    if(isHost)
+        return Host;
+    else if(isClient)
+        return Client;
+}
 
 /*
  * Draw players given center X center coordinate
  */
 void DrawPlayer(GeneralPlayerInfo_t * player)
 {
-
+    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, TOP_PLAYER_CENTER_Y - PADDLE_WIDTH, TOP_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Host].color);
+    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, BOTTOM_PLAYER_CENTER_Y - PADDLE_WIDTH, BOTTOM_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Client].color);
 }
 
 /*
