@@ -225,6 +225,8 @@ void CreateGame()
 {
     initCC3100(Host);
 
+    InitGameVariablesHost();
+
     // wait for client to join, try receive packet from them
     while(!clientInfo.joined)
         ReceiveData(&clientInfo, sizeof(clientInfo));
@@ -350,7 +352,6 @@ void ReceiveDataFromClient()
  */
 void GenerateBall()
 {
-
 }
 
 /*
@@ -499,17 +500,15 @@ void MoveLEDs()
  */
 playerType GetPlayerRole()
 {
-    InitPins();
-
     // init players
     isHost = false;
     isClient = false;
 
-    LCD_Init(false);
-
     LCD_Clear(LCD_BLACK);
 
     LCD_Text(100, 100, "Press a button to start!", LCD_ORANGE);
+
+    InitPins();
 
     // wait for button presses
     while(!(isHost | isClient));
@@ -552,7 +551,13 @@ void UpdateBallOnScreen(PrevBall_t * previousBall, Ball_t * currentBall, uint16_
  */
 void InitBoardState()
 {
+    G8RTOS_WaitSemaphore(&lcdSemaphore);
 
+    LCD_Clear(BACK_COLOR);
+    // draw lines
+//    LCD_DrawRectangle(ARENA_MIN_X, ARENA_MIN_X);
+
+    G8RTOS_SignalSemaphore(&lcdSemaphore);
 }
 
 /*********************************************** Public Functions *********************************************************************/
