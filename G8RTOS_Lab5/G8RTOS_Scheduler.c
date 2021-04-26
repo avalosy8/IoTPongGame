@@ -511,29 +511,6 @@ sched_ErrCode_t G8RTOS_KillThread(threadId_t threadId)
 sched_ErrCode_t G8RTOS_KillSelf()
 {
     return G8RTOS_KillThread(CurrentlyRunningThread->threadID);
-    /*
-    int32_t IBit_State = StartCriticalSection();
-
-    // ensure last thread isn't being killed
-    if(NumberOfThreads == 1)
-        return CANNOT_KILL_LAST_THREAD;
-
-    CurrentlyRunningThread->alive = false;
-
-    // update TCB so threads aren't pointing to dead thread
-    tcb_t * temp_ptr = CurrentlyRunningThread->next_tcb;
-    CurrentlyRunningThread->prev_tcb->next_tcb = temp_ptr;
-    temp_ptr->prev_tcb = CurrentlyRunningThread->prev_tcb;
-    // left off thread_ptr's next and prev still pointing...
-
-    NumberOfThreads--;
-
-    EndCriticalSection(IBit_State);
-
-    ICSR |= SCB_ICSR_PENDSVSET_Msk; // context switch enabled
-
-    return NO_ERROR;
-    */
 }
 
 threadId_t G8RTOS_GetThreadId()
@@ -566,6 +543,19 @@ sched_ErrCode_t G8RTOS_AddAPeriodicEvent(void(*AthreadToAdd)(void), uint8_t prio
 
     EndCriticalSection(IBit_State);
     return NO_ERROR;
+}
+
+// kills all threads except CRT
+void G8RTOS_KillOthers()
+{
+    int32_t IBit_State = StartCriticalSection();
+
+    int i;
+    for(i = 0; i < MAX_THREADS; i++)
+        if(threadControlBlocks[i].alive && (threadControlBlocks[i].threadID != CurrentlyRunningThread->threadID))
+            G8RTOS_KillThread(threadControlBlocks[i].threadID);
+
+    EndCriticalSection(IBit_State);
 }
 
 /*********************************************** Public Functions *********************************************************************/

@@ -197,10 +197,10 @@ void InitGameVariablesHost()
 
     // general player info
     gameState.players[Host].color = PLAYER_BLUE;
-    gameState.players[Host].currentCenter = TOP_PLAYER_CENTER_Y;
+    gameState.players[Host].currentCenter = PADDLE_X_CENTER;
     gameState.players[Host].position = 0;
     gameState.players[Client].color = PLAYER_RED;
-    gameState.players[Client].currentCenter = BOTTOM_PLAYER_CENTER_Y;
+    gameState.players[Client].currentCenter = PADDLE_X_CENTER;
     gameState.players[Client].position = 0;
 
     // balls
@@ -340,8 +340,13 @@ void ReceiveDataFromClient()
             G8RTOS_SignalSemaphore(&wifiSemaphore);
 
             // update player's curr center with displacement from client
-            // <-- to add
+            gameState.players[Client].currentCenter += clientInfo.displacement; // should get from client
 
+            // check bounds, change center accordingly
+            if(gameState.players[Client].currentCenter < HORIZ_CENTER_MIN_PL)
+                gameState.players[Client].currentCenter = HORIZ_CENTER_MIN_PL;
+            else if(gameState.players[Client].currentCenter > HORIZ_CENTER_MAX_PL)
+                gameState.players[Client].currentCenter = HORIZ_CENTER_MAX_PL;
             sleep(2);
         }
     }
@@ -352,6 +357,19 @@ void ReceiveDataFromClient()
  */
 void GenerateBall()
 {
+    uint16_t sleepDuration = 5000;
+    char ballName[3];
+    while(1)
+    {
+        if(gameState.numberOfBalls < MAX_NUM_OF_BALLS)
+        {
+            sprintf(ballName, "%d", gameState.numberOfBalls); // int to string, stores in char array
+            G8RTOS_AddThread(MoveBall, 5, ballName);
+            gameState.numberOfBalls++;
+            sleepDuration -= 200;
+        }
+        sleep(sleepDuration);
+    }
 }
 
 /*
@@ -366,12 +384,17 @@ void ReadJoystickHost()
         GetJoystickCoordinates(&x_coord, &y_coord);
 
         // change displacement
-        // <-- to add
-
+        gameState.player.displacement = (x_coord >> JOYSTICK_DIV);
         sleep(10);
 
         // then add to bottom player
-        // <-- to add
+        gameState.players[Host].currentCenter += gameState.player.displacement;
+
+        // check bounds, change center accordingly
+        if(gameState.players[Host].currentCenter < HORIZ_CENTER_MIN_PL)
+            gameState.players[Host].currentCenter = HORIZ_CENTER_MIN_PL;
+        else if(gameState.players[Host].currentCenter > HORIZ_CENTER_MAX_PL)
+            gameState.players[Host].currentCenter = HORIZ_CENTER_MAX_PL;
     }
 }
 
@@ -380,7 +403,105 @@ void ReadJoystickHost()
  */
 void MoveBall()
 {
+    // index for ball struct array
+    int index;
+    // velocities
+    int8_t xVelocity = rand() % MAX_BALL_SPEED + 1;;
+    int8_t yVelocity = rand() % MAX_BALL_SPEED + 1;;
 
+    // check for next available spot in array
+    int i;
+    for(i = 0; i < MAX_NUM_OF_BALLS; i++)
+    {
+        if(!gameState.balls[i].alive)
+        {
+            index = i;
+            break;
+        }
+    }
+
+    gameState.balls[index].currentCenterX = (ARENA_MIN_X + BALL_SIZE_D2) + (rand() % (ARENA_MAX_X - BALL_SIZE_D2));
+    gameState.balls[index].currentCenterY = rand() % (ARENA_MAX_Y - BALL_SIZE_D2);
+    gameState.balls[index].color = LCD_WHITE;
+    gameState.balls[index].alive = true;
+
+    while(1)
+    {
+        // add amount moved
+        gameState.balls[index].currentCenterX += xVelocity;
+        gameState.balls[index].currentCenterY += yVelocity;
+
+        // check for out of bounds
+        if(gameState.balls[index].currentCenterX > ARENA_MAX_X + BALL_SIZE_D2)
+        {
+
+        }
+        else if(gameState.balls[index].currentCenterX < ARENA_MIN_X)
+
+//        int32_t w = WIDTH_TOP_OR_BOTTOM;
+//        int32_t h = HEIGHT_TOP_OR_BOTTOM;
+//        int32_t dx_top = gameState.balls[index].currentCenterX - gameState.players[TOP].currentCenter;
+//        int32_t dy_top = gameState.balls[index].currentCenterY - TOP_PADDLE_EDGE;
+//        int32_t dx_bot = gameState.balls[index].currentCenterX - gameState.players[BOTTOM].currentCenter;
+//        int32_t dy_bot = gameState.balls[index].currentCenterY - BOTTOM_PADDLE_EDGE;
+//
+//        if(abs(dx_top) <= w && abs(dy_top) <= h)
+//        {
+//            int32_t wy = w*dy_top;
+//            int32_t hx = h*dx_top;
+//            if(wy>hx)
+//            {
+//                if(wy>-hx)
+//                {
+//                    // collision at the top
+//                }
+//                else
+//                {
+//                    // on the left
+//                }
+//            }
+//            else
+//            {
+//                if(wy>-hx)
+//                {
+//                    // on the right
+//                }
+//                else
+//                {
+//                    // at the bottom
+//                }
+//            }
+//        }
+//        else if(abs(dx_bot) <= w && abs(dy_bot) <= h)
+//        {
+//            int32_t wy = w*dy_bot;
+//            int32_t hx = h*dx_bot;
+//            if(wy>hx)
+//            {
+//                if(wy>-hx)
+//                {
+//                    // collision at the top
+//                }
+//                else
+//                {
+//                    // on the left
+//                }
+//            }
+//            else
+//            {
+//                if(wy>-hx)
+//                {
+//                    // on the right
+//                }
+//                else
+//                {
+//                    // at the bottom
+//                }
+//            }
+//        }
+
+        sleep(35);
+    }
 }
 
 /*
@@ -394,7 +515,7 @@ void EndOfGameHost()
     G8RTOS_WaitSemaphore(&lcdSemaphore);
 
     // kill all threads
-    // <-- to add
+    G8RTOS_KillOthers();
 
     // clear screen with winner's color
     if(gameState.winner == Client)
@@ -439,6 +560,7 @@ void IdleThread()
  */
 void DrawObjects()
 {
+
 
 }
 
@@ -526,8 +648,13 @@ playerType GetPlayerRole()
  */
 void DrawPlayer(GeneralPlayerInfo_t * player)
 {
-    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, TOP_PLAYER_CENTER_Y - PADDLE_WIDTH, TOP_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Host].color);
-    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, BOTTOM_PLAYER_CENTER_Y - PADDLE_WIDTH, BOTTOM_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Client].color);
+//    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, TOP_PLAYER_CENTER_Y - PADDLE_WIDTH, TOP_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Host].color);
+//    LCD_DrawRectangle(PADDLE_X_CENTER - PADDLE_LENGTH, PADDLE_X_CENTER + PADDLE_LENGTH, BOTTOM_PLAYER_CENTER_Y - PADDLE_WIDTH, BOTTOM_PLAYER_CENTER_Y + PADDLE_WIDTH, gameState.players[Client].color);
+    if(player->position == BOTTOM)
+        LCD_DrawRectangle(player->currentCenter - PADDLE_LENGTH, player->currentCenter + PADDLE_LENGTH, BOTTOM_PLAYER_CENTER_Y - PADDLE_WIDTH, BOTTOM_PLAYER_CENTER_Y + PADDLE_WIDTH, player->color);
+    else if(player->position == TOP)
+        LCD_DrawRectangle(player->currentCenter - PADDLE_LENGTH, player->currentCenter + PADDLE_LENGTH, TOP_PLAYER_CENTER_Y + PADDLE_WIDTH, TOP_PLAYER_CENTER_Y + PADDLE_WIDTH, player->color);
+
 }
 
 /*
@@ -554,8 +681,21 @@ void InitBoardState()
     G8RTOS_WaitSemaphore(&lcdSemaphore);
 
     LCD_Clear(BACK_COLOR);
-    // draw lines
-//    LCD_DrawRectangle(ARENA_MIN_X, ARENA_MIN_X);
+
+    // draw players
+    DrawPlayer(&gameState.players[Host]);
+    DrawPlayer(&gameState.players[Client]);
+
+    // draw arena
+    LCD_DrawRectangle(ARENA_MIN_X, ARENA_MIN_X + 5, ARENA_MIN_Y, ARENA_MAX_Y, LCD_WHITE);
+    LCD_DrawRectangle(ARENA_MAX_X - 5, ARENA_MAX_X, ARENA_MIN_Y, ARENA_MAX_Y, LCD_WHITE);
+
+    // print scores
+    char score[4];
+    sprintf(score, "%d", gameState.LEDScores[Host]);
+    LCD_Text(0, ARENA_MIN_Y + 10, score, gameState.players[Host].color);
+    sprintf(score, "%d", gameState.LEDScores[Client]);
+    LCD_Text(0, ARENA_MAX_Y - 10, score, gameState.players[Client].color);
 
     G8RTOS_SignalSemaphore(&lcdSemaphore);
 }

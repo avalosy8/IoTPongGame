@@ -106,6 +106,10 @@ threadId_t G8RTOS_GetThreadId();
  */
 sched_ErrCode_t G8RTOS_AddAPeriodicEvent(void(*AthreadToAdd)(void), uint8_t priority, IRQn_Type IRQn);
 
+/*
+ * Kills all threads expect CRT
+ */
+void G8RTOS_KillOthers();
 /*********************************************** Public Functions *********************************************************************/
 
 #endif /* G8RTOS_SCHEDULER_H_ */

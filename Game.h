@@ -94,6 +94,9 @@
 #define BLUE_LED BIT2
 #define RED_LED BIT0
 
+/* How much to divide joystick value */
+#define JOYSTICK_DIV 70
+
 /* Enums for player colors */
 typedef enum
 {
