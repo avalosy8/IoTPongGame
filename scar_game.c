@@ -1,7 +1,7 @@
 /*
  * Game.c
  *
- *
+ *  Created on: Apr 24, 2021
  *      Author: Scarlett
  */
 #include "Game.h"
@@ -10,9 +10,11 @@
 #include <time.h>
 #include <stdlib.h>
 
+sched_ErrCode_t error;
 
 volatile SpecificPlayerInfo_t client_info;
 volatile SpecificPlayerInfo_t host_info[2];
+
 SpecificPlayerInfo_t received_player_info;
 
 volatile uint8_t Num_of_current_balls = 0;
@@ -25,10 +27,18 @@ int32_t received_game_state2;
 int32_t received_game_state_cltEnd;
 
 bool game_done_var;
+bool ball_temp[MAX_NUM_OF_BALLS];
 
 volatile uint16_t game_is_done = false;
 
 volatile GeneralPlayerInfo_t gen_players_info[MAX_NUM_OF_PLAYERS];
+
+volatile Ball_t all_balls[MAX_NUM_OF_BALLS];
+
+PrevPlayer_t prev_player[MAX_NUM_OF_PLAYERS];  //2
+PrevBall_t prev_ball[MAX_NUM_OF_BALLS]; //8
+
+
 
 /*********************************************** Client Threads *********************************************************************/
 /*
@@ -53,12 +63,12 @@ void JoinGame()
         {
             SendData(&client_info, HOST_IP_ADDR, sizeof(client_info));
 
-            //received_game_state = ReceiveData(&game_state, sifeof(game_state));
+            //received_game_state = ReceiveData(&game_state, sizeof(game_state));
 
             received_game_state = -1;
             while(received_game_state < 0)
             {
-                received_game_state = ReceiveData(&game_state, sifeof(game_state));
+                received_game_state = ReceiveData(&game_state, sizeof(game_state));
             }
 
             if(client_info.joined)
@@ -148,13 +158,13 @@ void ReadJoystickClient()
 
     while(1)
     {
-        GetJoystickCoordinates(&x_coord, &Y_coordinate);
+        GetJoystickCoordinates(&x_coord, &y_coord);
 
         G8RTOS_WaitSemaphore(&lcdSemaphore);
 
         if (x_coord < 0)
         {
-            client_info.displacement = MAX_SCREEN_X - 73 - (6805 + x_crd) / 87;
+            client_info.displacement = MAX_SCREEN_X - 73 - (6805 + x_coord) / 87;
         }
 
         else if(x_coord > 0)
@@ -177,7 +187,7 @@ void ReadJoystickClient()
 /*
  * End of game for the client
  */
-void EndOfGameClient();
+void EndOfGameClient()
 {
     G8RTOS_WaitSemaphore(&wifiSemaphore);
     G8RTOS_WaitSemaphore(&lcdSemaphore);
@@ -239,14 +249,14 @@ void CreateGame()
     //initCC3100(Client);
     //GeneralPlayerInfo_t gen_players_info;
     P2DIR |= BLUE_LED;
-    int32_t = received_info;
+    int32_t received_info;
     //P2OUT &= BLUE_LED;
 
     //G8RTOS_Init();
 
     while(1)
     {
-       G8RTOS_WaitSemaphore(&player_Sem);
+       G8RTOS_WaitSemaphore(&lcdSemaphore);
 
        P2OUT &= BLUE_LED;
        Num_of_current_balls = 0;
@@ -305,46 +315,73 @@ void CreateGame()
 
        Num_current_players++;
 
-       G8RTOS_AddThread(GenerateBall, 3, "GenerateBall");
-       G8RTOS_AddThread(DrawObjects, 3, "DrawObjects");
-       G8RTOS_AddThread(ReadJoystickHost, 3, "DrawObjects");
-       G8RTOS_AddThread(SendDataToHost, 3, "dataToHost");
-       G8RTOS_AddThread(ReceiveDataFromHost, 3, "recvDataHost");
-       G8RTOS_AddThread(DrawObjects, 3, "drawObj");
-       G8RTOS_AddThread(MoveLEDs, 4, "leds");
-       G8RTOS_AddThread(IdleThread, 100, "idle");
+       if(Num_current_players == NUM_OF_PLAYERS_PLAYING)
+       {
+           P2->OUT |= BLUE_LED;
+       }
 
+       InitBoardState();
+       G8RTOS_SignalSemaphore(&lcdSemaphore);
+
+      G8RTOS_AddThread(GenerateBall, 3, "GenerateBall");
+      G8RTOS_AddThread(DrawObjects, 3, "DrawObjects");
+      G8RTOS_AddThread(ReadJoystickHost, 3, "DrawObjects");
+      G8RTOS_AddThread(SendDataToHost, 3, "dataToHost");
+      G8RTOS_AddThread(ReceiveDataFromHost, 3, "recvDataHost");
+      G8RTOS_AddThread(DrawObjects, 3, "drawObj");
+      G8RTOS_AddThread(MoveLEDs, 4, "MoveLeds");
+      G8RTOS_AddThread(IdleThread, 100, "idle");
+
+      G8RTOS_KillSelf();
     }
 }
 /*
  * Thread that sends game state to client
  */
-void SendDataToClient();
+void SendDataToClient()
+{
+
+}
 
 /*
  * Thread that receives UDP packets from client
  */
-void ReceiveDataFromClient();
+void ReceiveDataFromClient()
+{
+
+}
 
 /*
  * Generate Ball thread
  */
-void GenerateBall();
+void GenerateBall()
+{
+
+}
 
 /*
  * Thread to read host's joystick
  */
-void ReadJoystickHost();
+void ReadJoystickHost()
+{
+
+}
 
 /*
  * Thread to move a single ball
  */
-void MoveBall();
+void MoveBall()
+{
+
+}
 
 /*
  * End of game for the host
  */
-void EndOfGameHost();
+void EndOfGameHost()
+{
+
+}
 
 /*********************************************** Host Threads *********************************************************************/
 
@@ -361,12 +398,95 @@ void IdleThread()
 /*
  * Thread to draw all the objects in the game
  */
-void DrawObjects();
+void DrawObjects()
+{
+    //G8RTOS_WaitSemaphore(&lcdSemaphore);
+    //G8RTOS_WaitSemaphore(&wifiSemaphore);
+
+    int i;
+    for(i = 0; i < MAX_NUM_OF_BALLS; i++)
+    {
+        ball_temp[i] = 1;
+    }
+
+    int i;
+    for(i = 0; i < MAX_NUM_OF_PLAYERS; i++)
+    {
+        prev_player[i].Center = gen_players_info[i].currentCenter;
+    }
+
+    //G8RTOS_SignalSemaphore(&wifiSemaphore);
+    //G8RTOS_SignalSemaphore(&lcdSemaphore);
+
+
+    while(1)
+    {
+        G8RTOS_WaitSemaphore(&lcdSemaphore);
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+
+        int i;
+        for(i = 0; i < MAX_NUM_OF_BALLS; i++)
+        {
+            if(all_balls[i].alive == true)
+            {
+                if(ball_temp[i] = true)
+                {
+                    LCD_DrawRectangle(all_balls[i].currentCenterX - BALL_SIZE_D2, all_balls[i].currentCenterX + BALL_SIZE_D2, 
+                                      all_balls[i].currentCenterY - BALL_SIZE_D2, all_balls[i].currentCenterY + BALL_SIZE_D2, 
+                                      all_balls[i].color);
+                    prev_ball[i].CenterX = all_balls[i].currentCenterX;
+                    prev_ball[i].CenterY = all_balls[i].currentCenterY;
+                    ball_temp[i] = 0;
+                }
+
+                else if((prevBalls[i].CenterX != Balls[i].currentCenterX) || (prevBalls[i].CenterY != Balls[i].currentCenterY))
+                {
+                    UpdateBallOnScreen(&prevBalls[i], &Balls[i], Balls[i].color);
+                }
+            }
+
+            else
+            {
+                if(ball_temp[i] == false)
+                {
+                    UpdateBallOnScreen(&prev_ball[i], &all_balls[i], BACK_COLOR);
+                    ballIsFree[i] = TRUE;
+                }
+            }
+
+        }
+
+        /*prev_player[0].Center = gen_players_info[0].currentCenter;
+        prev_player[1].Center = gen_players_info[1].currentCenter;
+
+        UpdatePlayerOnScreen(&prev_player[0], &gen_players_info[0]);
+        UpdatePlayerOnScreen(&prev_player[1], &gen_players_info[1]);*/
+
+        if(prev_player[0].Center != gen_players_info[0].currentCenter)
+        {
+            UpdatePlayerOnScreen(&prev_player[0], &gen_players_info[0]);
+        }
+
+        if(prev_player[1].Center != gen_players_info[1].currentCenter)
+        {
+            UpdatePlayerOnScreen(&prev_player[i], &gen_players_info[i]);
+        }
+
+
+        G8RTOS_SignalSemaphore(&wifiSemaphore);
+        G8RTOS_SignalSemaphore(&lcdSemaphore);
+
+        sleep(20);
+    }
+}
 
 /*
  * Thread to update LEDs based on score
  */
-void MoveLEDs();
+void MoveLEDs()
+{
+
+}
 
 /*********************************************** Common Threads *********************************************************************/
 
@@ -375,27 +495,40 @@ void MoveLEDs();
 /*
  * Returns either Host or Client depending on button press
  */
-playerType GetPlayerRole();
+playerType GetPlayerRole()
+{
+
+}
 
 /*
  * Draw players given center X center coordinate
  */
-void DrawPlayer(GeneralPlayerInfo_t * player);
+void DrawPlayer(GeneralPlayerInfo_t * player)
+{
+
+}
 
 /*
  * Updates player's paddle based on current and new center
  */
-void UpdatePlayerOnScreen(PrevPlayer_t * prevPlayerIn, GeneralPlayerInfo_t * outPlayer);
+void UpdatePlayerOnScreen(PrevPlayer_t * prevPlayerIn, GeneralPlayerInfo_t * outPlayer)
+{
+
+}
 
 /*
  * Function updates ball position on screen
  */
-void UpdateBallOnScreen(PrevBall_t * previousBall, Ball_t * currentBall, uint16_t outColor);
+void UpdateBallOnScreen(PrevBall_t * previousBall, Ball_t * currentBall, uint16_t outColor)
+{
+
+}
 
 /*
  * Initializes and prints initial game state
  */
-void InitBoardState();
+void InitBoardState()
+{
 
-
+}
 
