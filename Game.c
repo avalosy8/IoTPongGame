@@ -130,7 +130,7 @@ void SendDataToHost()
         G8RTOS_WaitSemaphore(&wifiSemaphore);
         SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
         G8RTOS_SignalSemaphore(&wifiSemaphore);
-        client_info.displacement = 0;
+        clientInfo.displacement = 0;
         G8RTOS_SignalSemaphore(&lcdSemaphore);
         sleep(2);
     }
