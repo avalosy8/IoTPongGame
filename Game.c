@@ -14,7 +14,7 @@ void JoinGame()
     
     initCC3100(Client);
     P2->OUT &= ~BLUE_LED;
-    game_state.gameDone = false;
+    gameState.gameDone = false;
     
     while(1)
     {
