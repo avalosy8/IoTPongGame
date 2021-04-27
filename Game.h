@@ -188,7 +188,7 @@ semaphore_t wifiSemaphore;
 semaphore_t lcdSemaphore;
 semaphore_t ledSemaphore;
 
-GameState_t gameState;
+volatile GameState_t gameState;
 //GeneralPlayerInfo_t playerInfo;
 SpecificPlayerInfo_t clientInfo;
 
