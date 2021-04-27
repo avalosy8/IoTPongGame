@@ -190,7 +190,7 @@ semaphore_t ledSemaphore;
 
 volatile GameState_t gameState;
 //GeneralPlayerInfo_t playerInfo;
-SpecificPlayerInfo_t clientInfo;
+volatile SpecificPlayerInfo_t clientInfo;
 
 bool isHost;
 bool isClient;
