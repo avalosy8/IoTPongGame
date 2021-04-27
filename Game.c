@@ -9,54 +9,83 @@
  */
 void JoinGame()
 {
+    volatile GameState_t game_state;
+    int32_t received_game_state;
+    
     initCC3100(Client);
-
-    // set up struct to be sent to Host
-    clientInfo.IP_address = getLocalIP();
-    clientInfo.displacement = 0;
-    clientInfo.playerNumber = Client;
-    clientInfo.ready = false;
-    clientInfo.joined = true;
-    clientInfo.acknowledge = false;
-
-    gameState.player.acknowledge = false;
-
-    // send clientInfo to Host
-    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
-
-    // wait for server response
-    while(!gameState.player.acknowledge)
+    P2->OUT &= ~BLUE_LED;
+    game_state.gameDone = false;
+    
+    while(1)
     {
-        ReceiveData(&gameState, sizeof(gameState));
+        // set up struct to be sent to Host
+        clientInfo.IP_address = getLocalIP();
+        clientInfo.displacement = 0;
+        clientInfo.playerNumber = Client;
+        clientInfo.ready = false;
+        clientInfo.joined = false; //true;
+        clientInfo.acknowledge = false;
+
+        while(!clientInfo.joined)
+        {
+            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
+            //received_game_state = ReceiveData(&game_state, sizeof(game_state));
+
+            received_game_state = -1;
+            while(received_game_state < 0)
+            {
+                received_game_state = ReceiveData(&game_state, sizeof(game_state));
+            }
+
+            if(clientInfo.joined)
+            {
+                clientInfo.acknowledge = true;
+            }
+            
+            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+        }
+        /*
+        gameState.player.acknowledge = false;
+
+        // send clientInfo to Host
         SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
+        // wait for server response
+        while(!gameState.player.acknowledge)
+        {
+            ReceiveData(&gameState, sizeof(gameState));
+            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+        }
+
+        // acknowledge when joined game
+        clientInfo.acknowledge = true;
+        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
+        // wait for Client to receive from Host
+        while(ReceiveData(&gameState, sizeof(gameState)) < 0)
+            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+
+        // toggle red LED2
+        BITBAND_PERI(P2->OUT, 0) ^= 1; // red*/
+        
+        P2->OUT |= BLUE_LED;
+        // init board state, semaphores, thread
+        InitBoardState();
+
+        G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+        G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+        G8RTOS_InitSemaphore(&ledSemaphore, 1);
+
+        G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
+        G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
+        G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
+        G8RTOS_AddThread(DrawObjects, 1, "drawObj");
+        G8RTOS_AddThread(MoveLEDs, 1, "leds");
+        G8RTOS_AddThread(IdleThread, 6, "idle");
+
+        G8RTOS_KillSelf();
     }
-
-    // acknowledge when joined game
-    clientInfo.acknowledge = true;
-    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
-
-    // wait for Client to receive from Host
-    while(ReceiveData(&gameState, sizeof(gameState)) < 0)
-        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
-
-    // toggle red LED2
-    BITBAND_PERI(P2->OUT, 0) ^= 1; // red
-
-    // init board state, semaphores, thread
-    InitBoardState();
-
-    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
-    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
-    G8RTOS_InitSemaphore(&ledSemaphore, 1);
-
-    G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
-    G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
-    G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
-    G8RTOS_AddThread(DrawObjects, 1, "drawObj");
-    G8RTOS_AddThread(MoveLEDs, 1, "leds");
-    G8RTOS_AddThread(IdleThread, 6, "idle");
-
-    G8RTOS_KillSelf();
 }
 
 /*
