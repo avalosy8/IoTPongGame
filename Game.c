@@ -9,7 +9,7 @@
  */
 void JoinGame()
 {
-    volatile GameState_t game_state;
+    //volatile GameState_t game_state;
     int32_t received_game_state;
     
     initCC3100(Client);
@@ -30,12 +30,12 @@ void JoinGame()
         {
             SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
-            //received_game_state = ReceiveData(&game_state, sizeof(game_state));
+            //received_game_state = ReceiveData(&gameState, sizeof(gameState));
 
             received_game_state = -1;
             while(received_game_state < 0)
             {
-                received_game_state = ReceiveData(&game_state, sizeof(game_state));
+                received_game_state = ReceiveData(&gameState, sizeof(gameState));
             }
 
             if(clientInfo.joined)
@@ -93,11 +93,28 @@ void JoinGame()
  */
 void ReceiveDataFromHost()
 {
+    int32_t received_game_state2;
+    bool game_done_var;
+    
     while(1)
     {
-        G8RTOS_WaitSemaphore(&wifiSemaphore);
-        //
-        G8RTOS_SignalSemaphore(&wifiSemaphore);
+        received_game_state2 = -1;
+        while(received_game_state2 < 0)
+        {
+            G8RTOS_WaitSemaphore(&wifiSemaphore);
+            received_game_state2 = ReceiveData(&gameState, sizeof(gameState));
+            G8RTOS_SignalSemaphore(&wifiSemaphore);
+        }
+
+        G8RTOS_WaitSemaphore(&lcdSemaphore);
+        game_done_var = gameState.gameDone;//game_is_done;
+        G8RTOS_SignalSemaphore(&lcdSemaphore);
+
+        if(game_done_var)
+        {
+            G8RTOS_AddThread(EndOfGameClient, 1, "endOfGameClient");
+        }
+
         sleep(5);
     }
 }
@@ -109,9 +126,12 @@ void SendDataToHost()
 {
     while(1)
     {
+        G8RTOS_WaitSemaphore(&lcdSemaphore);
         G8RTOS_WaitSemaphore(&wifiSemaphore);
         SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
         G8RTOS_SignalSemaphore(&wifiSemaphore);
+        client_info.displacement = 0;
+        G8RTOS_SignalSemaphore(&lcdSemaphore);
         sleep(2);
     }
 }
@@ -126,10 +146,24 @@ void ReadJoystickClient()
     while(1)
     {
         GetJoystickCoordinates(&x_coord, &y_coord);
+        G8RTOS_WaitSemaphore(&lcdSemaphore);
 
-        // add offset, add displacement to self accordingly
-        // <-- to add
+        if (x_coord < 0)
+        {
+            clientInfo.displacement = MAX_SCREEN_X - 73 - (6805 + x_coord) / 87;
+        }
 
+        else if(x_coord > 0)
+        {
+            clientInfo.displacement = (8173 - x_coord)/160;
+        }
+
+        else
+        {
+            clientInfo.displacement = PADDLE_X_CENTER;
+        }
+        
+        G8RTOS_SignalSemaphore(&lcdSemaphore);
         sleep(10);
     }
 }
@@ -139,11 +173,56 @@ void ReadJoystickClient()
  */
 void EndOfGameClient()
 {
+    int32_t received_game_state_cltEnd;
     // wait for all semaphores
     G8RTOS_WaitSemaphore(&ledSemaphore);
     G8RTOS_WaitSemaphore(&wifiSemaphore);
     G8RTOS_WaitSemaphore(&lcdSemaphore);
+    //G8RTOS_KillOtherThreads();
+    G8RTOS_KillOthers();
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
 
+    LP3943_LedModeSet(BLUE, gameState.LEDScores[TOP]);
+    LP3943_LedModeSet(RED, gameState.LEDScores[BOTTOM]);
+
+    if(gameState.winner = TOP)
+    {
+        LCD_DrawRectangle(MIN_SCREEN_X, MAX_SCREEN_X, MIN_SCREEN_Y, MAX_SCREEN_Y, LCD_BLUE);
+        LCD_Text(0, 100, "Blue player is the winner.", LCD_WHITE);
+    }
+    else
+    {
+        LCD_DrawRectangle(MIN_SCREEN_X, MAX_SCREEN_X, MIN_SCREEN_Y, MAX_SCREEN_Y, LCD_RED);
+        LCD_Text(0, 100, "Red player is the winner.", LCD_WHITE);
+    }
+
+    LCD_Text(0, 100, "Please wait for host to restart game.", LCD_WHITE);
+
+    while(1)
+    {
+        received_game_state_cltEnd = -1;
+        while(received_game_state_cltEnd < 0)
+        {
+            received_game_state_cltEnd = ReceiveData(&gameState, sizeof(gameState));
+        }
+
+        if (gameState.gameDone == false)    //game_is_done == false)
+        {
+            InitBoardState();
+
+            G8RTOS_AddThread(ReadJoystickClient, 3, "joystickC");
+            G8RTOS_AddThread(SendDataToHost, 3, "dataToHost");
+            G8RTOS_AddThread(ReceiveDataFromHost, 3, "recvDataHost");
+            G8RTOS_AddThread(DrawObjects, 3, "drawObj");
+            G8RTOS_AddThread(MoveLEDs, 4, "leds");
+            G8RTOS_AddThread(IdleThread, 100, "idle");
+            G8RTOS_KillSelf();
+        }
+    }
+    
+    /*
     // kill all threads
     // <-- to add
 
@@ -162,7 +241,7 @@ void EndOfGameClient()
     // re-init semaphores
     G8RTOS_InitSemaphore(&ledSemaphore, 1);
     G8RTOS_InitSemaphore(&wifiSemaphore, 1);
-    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);  
 
     // add all threads and reset game variables
     G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
@@ -172,7 +251,7 @@ void EndOfGameClient()
     G8RTOS_AddThread(MoveLEDs, 1, "leds");
     G8RTOS_AddThread(IdleThread, 6, "idle");
 
-    G8RTOS_KillSelf();
+    G8RTOS_KillSelf();   */
 }
 
 /*********************************************** Client Threads *********************************************************************/
