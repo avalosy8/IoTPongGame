@@ -366,7 +366,10 @@ void GenerateBall()
             sprintf(ballName, "%d", gameState.numberOfBalls); // int to string, stores in char array
             G8RTOS_AddThread(MoveBall, 5, "ball");
             gameState.numberOfBalls++;
-            sleepDuration -= 200;
+            if(sleepDuration < 0)
+                sleepDuration = 5000;
+            else
+                sleepDuration -= 200;
         }
         sleep(sleepDuration);
     }
@@ -397,6 +400,61 @@ void ReadJoystickHost()
 
         sleep(10);
     }
+}
+
+bool CollisionDetect(playerPosition position, int ballIndex)
+{
+    //tried implementing algo
+    int32_t w = WIDTH_TOP_OR_BOTTOM;
+    int32_t h = HEIGHT_TOP_OR_BOTTOM;
+    int32_t dx;
+    int32_t dy;
+
+    if(position == TOP)
+    {
+        dx = gameState.balls[ballIndex].currentCenterX - gameState.players[TOP].currentCenter;
+        dy = gameState.balls[ballIndex].currentCenterY - TOP_PADDLE_EDGE;
+    }
+    else
+    {
+        dx = gameState.balls[ballIndex].currentCenterX - gameState.players[BOTTOM].currentCenter;
+        dy = gameState.balls[ballIndex].currentCenterY - BOTTOM_PADDLE_EDGE;
+    }
+
+    if(abs(dx) <= w && abs(dy) <= h)
+    {
+        int32_t wy = w*dy;
+        int32_t hx = h*dx;
+        if(wy>hx)
+        {
+            if(wy>-hx)
+            {
+                // collision at the red paddle
+                int a = 1;
+                return true;
+            }
+            else
+            {
+                // on the left
+                int a = 1;
+            }
+        }
+        else
+        {
+            if(wy>-hx)
+            {
+                // on the right
+                int a = 1;
+            }
+            else
+            {
+                // should be collision at the blue paddle
+                int a = 1;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /*
@@ -447,88 +505,52 @@ void MoveBall()
             gameState.balls[index].currentCenterX += (-xVelocity);
             xVelocity = -xVelocity;
         }
-        else if((gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE + BALL_SIZE_D2) && gameState.balls[index].alive)
+        else if((gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE - BALL_SIZE_D2) && gameState.balls[index].alive)
         {
             // top border
-            // check if hit top paddle
-            gameState.balls[index].alive = false;
-            gameState.numberOfBalls--;
-            LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
-            G8RTOS_KillSelf();
+//            bool ret = CollisionDetect(TOP, index);
+
+            // if collision occurs, adject ball's velocity and color
+            if(CollisionDetect(TOP, index))
+            {
+                gameState.balls[index].color = gameState.players[TOP].color;
+                gameState.balls[index].currentCenterY = TOP_PADDLE_EDGE - BALL_SIZE_D2;
+                gameState.balls[index].currentCenterY += (-yVelocity);
+
+                yVelocity = -yVelocity;
+            }
+            else
+            {
+                gameState.LEDScores[BOTTOM]++;
+                gameState.balls[index].alive = false;
+                gameState.numberOfBalls--;
+                LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+                G8RTOS_KillSelf();
+            }
         }
-        else if((gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE - BALL_SIZE_D2) && gameState.balls[index].alive)
+        else if((gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE + BALL_SIZE_D2) && gameState.balls[index].alive)
         {
             // bottom border
-            // check if hit bot paddle
-            gameState.balls[index].alive = false;
-            gameState.numberOfBalls--;
-            LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
-            G8RTOS_KillSelf();
+//            bool ret = CollisionDetect(BOTTOM, index);
+
+            // if collision occurs, adject ball's velocity and color
+            if(CollisionDetect(BOTTOM, index))
+            {
+                gameState.balls[index].color = gameState.players[BOTTOM].color;
+                gameState.balls[index].currentCenterY = BOTTOM_PADDLE_EDGE + BALL_SIZE_D2;
+                gameState.balls[index].currentCenterY += (-yVelocity);
+
+                yVelocity = -yVelocity;
+            }
+            else
+            {
+                gameState.LEDScores[TOP]++;
+                gameState.balls[index].alive = false;
+                gameState.numberOfBalls--;
+                LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+                G8RTOS_KillSelf();
+            }
         }
-
-        // tried implementing algo
-//        int32_t w = WIDTH_TOP_OR_BOTTOM;
-//        int32_t h = HEIGHT_TOP_OR_BOTTOM;
-//        int32_t dx_top = gameState.balls[index].currentCenterX - gameState.players[TOP].currentCenter;
-//        int32_t dy_top = gameState.balls[index].currentCenterY - TOP_PADDLE_EDGE;
-//        int32_t dx_bot = gameState.balls[index].currentCenterX - gameState.players[BOTTOM].currentCenter;
-//        int32_t dy_bot = gameState.balls[index].currentCenterY - BOTTOM_PADDLE_EDGE;
-//
-//        if(abs(dx_top) <= w && abs(dy_top) <= h)
-//        {
-//            int32_t wy = w*dy_top;
-//            int32_t hx = h*dx_top;
-//            if(wy>hx)
-//            {
-//                if(wy>-hx)
-//                {
-//                    // collision at the top
-//                }
-//                else
-//                {
-//                    // on the left
-//                }
-//            }
-//            else
-//            {
-//                if(wy>-hx)
-//                {
-//                    // on the right
-//                }
-//                else
-//                {
-//                    // at the bottom
-//                }
-//            }
-//        }
-//        else if(abs(dx_bot) <= w && abs(dy_bot) <= h)
-//        {
-//            int32_t wy = w*dy_bot;
-//            int32_t hx = h*dx_bot;
-//            if(wy>hx)
-//            {
-//                if(wy>-hx)
-//                {
-//                    // collision at the top
-//                }
-//                else
-//                {
-//                    // on the left
-//                }
-//            }
-//            else
-//            {
-//                if(wy>-hx)
-//                {
-//                    // on the right
-//                }
-//                else
-//                {
-//                    // at the bottom
-//                }
-//            }
-//        }
-
         sleep(35);
     }
 }
@@ -794,9 +816,6 @@ void InitBoardState()
     // draw players
     DrawPlayer(&gameState.players[Host]);
     DrawPlayer(&gameState.players[Client]);
-
-//    LCD_DrawRectangle(PADDLE_X_CENTER - 32, PADDLE_X_CENTER + 32, ARENA_MIN_Y, ARENA_MIN_Y + PADDLE_WID_D2, LCD_BLUE);
-//    LCD_DrawRectangle(PADDLE_X_CENTER - 32, PADDLE_X_CENTER + 32, ARENA_MAX_Y - PADDLE_WID_D2, ARENA_MAX_Y, LCD_RED);
 
     // draw arena
     LCD_DrawRectangle(ARENA_MIN_X - 5, ARENA_MIN_X, ARENA_MIN_Y, ARENA_MAX_Y, LCD_WHITE);

@@ -328,6 +328,11 @@ void InitGameVariablesHost();
  */
 void waitStart();
 
+/*
+ * Function that returns whether or not a paddle collision occurred
+ */
+bool CollisionDetect(playerPosition position, int ballIndex);
+
 /*********************************************** Public Functions *********************************************************************/
 
 
