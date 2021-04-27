@@ -51,7 +51,7 @@
 #define BALL_SIZE_D2                 (BALL_SIZE >> 1)
 
 /* Centers for paddles at the center of the sides */
-#define PADDLE_X_CENTER              MAX_SCREEN_X >> 1
+#define PADDLE_X_CENTER              (MAX_SCREEN_X >> 1)
 
 /* Edge limitations for player's center coordinate */
 #define HORIZ_CENTER_MAX_PL          (ARENA_MAX_X - PADDLE_LEN_D2)
@@ -95,7 +95,7 @@
 #define RED_LED BIT0
 
 /* How much to divide joystick value */
-#define JOYSTICK_DIV 70
+#define JOYSTICK_DIV 9
 
 /* Enums for player colors */
 typedef enum

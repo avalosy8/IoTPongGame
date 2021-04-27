@@ -26,9 +26,11 @@ void main(void)
     // get player role
     playerType player = GetPlayerRole();
     if(player == Host)
-        CreateGame();
+        G8RTOS_AddThread(CreateGame, 5, "create");
+//        CreateGame();
     else if(player == Client)
-        JoinGame();
+        G8RTOS_AddThread(JoinGame, 5, "join");
+//        JoinGame();
 
     // launch OS
     int retval = G8RTOS_Launch();
