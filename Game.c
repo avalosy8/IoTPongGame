@@ -340,7 +340,7 @@ void ReceiveDataFromClient()
             G8RTOS_SignalSemaphore(&wifiSemaphore);
 
             // update player's curr center with displacement from client
-            gameState.players[Client].currentCenter += clientInfo.displacement; // should get from client
+            gameState.players[Client].currentCenter -= clientInfo.displacement; // should get from client
 
             // check bounds, change center accordingly
             if(gameState.players[Client].currentCenter < HORIZ_CENTER_MIN_PL)
@@ -361,7 +361,7 @@ void GenerateBall()
     char ballName[3];
     while(1)
     {
-        if(gameState.numberOfBalls < MAX_NUM_OF_BALLS)
+        if((gameState.numberOfBalls < MAX_NUM_OF_BALLS) && (gameState.numberOfBalls >= 0))
         {
             sprintf(ballName, "%d", gameState.numberOfBalls); // int to string, stores in char array
             G8RTOS_AddThread(MoveBall, 5, "ball");
@@ -444,19 +444,26 @@ void MoveBall()
         {
             // left border
             gameState.balls[index].currentCenterX = ARENA_MIN_X + BALL_SIZE_D2;
-            gameState.balls[index].currentCenterX += xVelocity;
-            xVelocity = xVelocity;
+            gameState.balls[index].currentCenterX += (-xVelocity);
+            xVelocity = -xVelocity;
         }
-        else if(gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE + BALL_SIZE_D2)
+        else if((gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE + BALL_SIZE_D2) && gameState.balls[index].alive)
         {
             // top border
             // check if hit top paddle
-
+            gameState.balls[index].alive = false;
+            gameState.numberOfBalls--;
+            LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+            G8RTOS_KillSelf();
         }
-        else if(gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE - BALL_SIZE_D2)
+        else if((gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE - BALL_SIZE_D2) && gameState.balls[index].alive)
         {
             // bottom border
             // check if hit bot paddle
+            gameState.balls[index].alive = false;
+            gameState.numberOfBalls--;
+            LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+            G8RTOS_KillSelf();
         }
 
         // tried implementing algo
