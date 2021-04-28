@@ -16,76 +16,46 @@ void JoinGame()
     P2->OUT &= ~BLUE_LED;
     gameState.gameDone = false;
     
-    while(1)
-    {
-        // set up struct to be sent to Host
-        clientInfo.IP_address = getLocalIP();
-        clientInfo.displacement = 0;
-        clientInfo.playerNumber = Client;
-        clientInfo.ready = false;
-        clientInfo.joined = false; //true;
-        clientInfo.acknowledge = false;
+    //while(1)
+    //{
+    // set up struct to be sent to Host
+    clientInfo.IP_address = getLocalIP();
+    clientInfo.displacement = 0;
+    clientInfo.playerNumber = Client;
+    clientInfo.ready = true; //false;
+    clientInfo.joined = false; //true;
+    clientInfo.acknowledge = false;
 
-        while(!clientInfo.joined)
-        {
-            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+    //send player info to host
+    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
-            //received_game_state = ReceiveData(&gameState, sizeof(gameState));
+    // wait for server response
+    while(ReceiveData(&gameState.player.acknowledge, sizeof(gameState.player.acknowledge)) < 0);
 
-            received_game_state = -1;
-            while(received_game_state < 0)
-            {
-                received_game_state = ReceiveData(&gameState, sizeof(gameState));
-            }
+    // if joined game, light LED to show connection
+    clientInfo.joined = true;
+    clientInfo.acknowledge = true;
 
-            if(clientInfo.joined)
-            {
-                clientInfo.acknowledge = true;
-            }
-            
-            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
-        }
-        /*
-        gameState.player.acknowledge = false;
+    SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
-        // send clientInfo to Host
-        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
 
-        // wait for server response
-        while(!gameState.player.acknowledge)
-        {
-            ReceiveData(&gameState, sizeof(gameState));
-            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
-        }
+    P2->OUT |= BLUE_LED;
+    // init board state, semaphores, thread
+    InitBoardState();
 
-        // acknowledge when joined game
-        clientInfo.acknowledge = true;
-        SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+    G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
 
-        // wait for Client to receive from Host
-        while(ReceiveData(&gameState, sizeof(gameState)) < 0)
-            SendData(&clientInfo, HOST_IP_ADDR, sizeof(clientInfo));
+    G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
+    G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
+    G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
+    G8RTOS_AddThread(DrawObjects, 1, "drawObj");
+    G8RTOS_AddThread(MoveLEDs, 1, "leds");
+    G8RTOS_AddThread(IdleThread, 6, "idle");
 
-        // toggle red LED2
-        BITBAND_PERI(P2->OUT, 0) ^= 1; // red*/
-        
-        P2->OUT |= BLUE_LED;
-        // init board state, semaphores, thread
-        InitBoardState();
-
-        G8RTOS_InitSemaphore(&wifiSemaphore, 1);
-        G8RTOS_InitSemaphore(&lcdSemaphore, 1);
-        G8RTOS_InitSemaphore(&ledSemaphore, 1);
-
-        G8RTOS_AddThread(ReadJoystickClient, 1, "joystickC");
-        G8RTOS_AddThread(SendDataToHost, 1, "dataToHost");
-        G8RTOS_AddThread(ReceiveDataFromHost, 1, "recvDataHost");
-        G8RTOS_AddThread(DrawObjects, 1, "drawObj");
-        G8RTOS_AddThread(MoveLEDs, 1, "leds");
-        G8RTOS_AddThread(IdleThread, 6, "idle");
-
-        G8RTOS_KillSelf();
-    }
+    G8RTOS_KillSelf();
+    //}
 }
 
 /*
@@ -297,7 +267,7 @@ void InitGameVariablesHost()
 {
     // Host variables
     gameState.player.IP_address = HOST_IP_ADDR;
-    gameState.player.acknowledge = false;
+    gameState.player.acknowledge = true; //false;
     gameState.player.displacement = 0;
     gameState.player.joined = false;
     gameState.player.playerNumber= Host;
@@ -306,10 +276,10 @@ void InitGameVariablesHost()
     // general player info
     gameState.players[Host].color = PLAYER_BLUE;
     gameState.players[Host].currentCenter = PADDLE_X_CENTER;
-    gameState.players[Host].position = Host;
+    gameState.players[Host].position = 0;  //changed to bottom // Host; //TOP
     gameState.players[Client].color = PLAYER_RED;
     gameState.players[Client].currentCenter = PADDLE_X_CENTER;
-    gameState.players[Client].position = Client;
+    gameState.players[Client].position = 1; //change to top  // Client;  //BOTTOM
 
     // balls
     int i;
@@ -334,21 +304,20 @@ void CreateGame()
     GPIO_disableInterrupt(GPIO_PORT_P4, GPIO_PIN4);
     GPIO_disableInterrupt(GPIO_PORT_P5, GPIO_PIN4);
 
-    initCC3100(Host);
+    //initCC3100(Host);
 
     InitGameVariablesHost();
 
     // wait for client to join, try receive packet from them
-//    while(!clientInfo.joined)
-//        ReceiveData(&clientInfo, sizeof(clientInfo));
-//
-//    // send ack to client, wait for client to ack back
-//    gameState.player.acknowledge = true;
-//    while(!clientInfo.acknowledge)
-//    {
-//        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
-//        ReceiveData(&clientInfo, sizeof(clientInfo));
-//    }
+    while(ReceiveData(&clientInfo, sizeof(clientInfo)) < 0);
+
+    InitBoardState();
+
+    // send ack to client, wait for client to ack back
+    gameState.player.acknowledge = true;
+
+    SendData(&gameState.player.acknowledge, clientInfo.IP_address, sizeof(gameState.player.acknowledge));
+
 
     // if connected, toggle blue LED2
     BITBAND_PERI(P2->OUT, 2) ^= 1; // blue
@@ -359,18 +328,19 @@ void CreateGame()
     G8RTOS_InitSemaphore(&ledSemaphore, 1);
 
     // init board (draw arena, players, scores)
-    InitBoardState();
+    //InitBoardState();
 
     // add threads
     G8RTOS_AddThread(GenerateBall, 2, "gen_ball");
     G8RTOS_AddThread(DrawObjects, 2, "drawObj");
     G8RTOS_AddThread(ReadJoystickHost, 2, "joystickH");
-//    G8RTOS_AddThread(SendDataToClient, 2, "sendDataClient");
-//    G8RTOS_AddThread(ReceiveDataFromClient, 2, "recvDataClient");
+    G8RTOS_AddThread(SendDataToClient, 2, "sendDataClient");
+    G8RTOS_AddThread(ReceiveDataFromClient, 2, "recvDataClient");
     G8RTOS_AddThread(MoveLEDs, 2, "leds");
     G8RTOS_AddThread(IdleThread, 6, "idle");
 
     G8RTOS_KillSelf();
+
 }
 
 // B0 pressed
