@@ -163,7 +163,7 @@ void InitPins()
 
     NVIC_EnableIRQ(PORT4_IRQn); // enable PORT4 interrupt using enable bits controlled by registers in NVIC
 
-    // B1 bottom button for client
+    // B2 bottom button for client
     P5->DIR &= ~BIT4;       // set as input
     P5->IFG &= ~BIT4;       // clear IFG flag on P5.4
     P5->IE |= BIT4;         // enable interrupt on P5.4
@@ -248,7 +248,8 @@ void CreateGame()
     // init semaphores
     G8RTOS_InitSemaphore(&wifiSemaphore, 1);
     G8RTOS_InitSemaphore(&lcdSemaphore, 1);
-    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+//    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+    G8RTOS_InitSemaphore(&playerSemaphore, 1);
 
     // init board (draw arena, players, scores)
     InitBoardState();
@@ -273,6 +274,7 @@ void PORT4_IRQHandler(void)
     if(P4->IFG & BIT4)
     {
         isHost = true;
+        gameState.player.ready = true; // for after game ends
         P4->IFG &= ~BIT4;
     }
 
@@ -301,20 +303,18 @@ void SendDataToClient()
 {
     while(1)
     {
-        G8RTOS_WaitSemaphore(&wifiSemaphore);
-        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
-        G8RTOS_SignalSemaphore(&wifiSemaphore);
-
         // check if game is done
-        if((gameState.LEDScores[Client] >= 8) || (gameState.LEDScores[Host] >= 8))
+        if(gameState.gameDone)
         {
-            gameState.gameDone = true;
             if(gameState.LEDScores[Host] >= 8)
                 gameState.winner = Host;
             else
                 gameState.winner = Client;
-            G8RTOS_AddThread(EndOfGameHost, 1, "endHost");
+            G8RTOS_AddThread(EndOfGameHost, 5, "endHost");
         }
+        G8RTOS_WaitSemaphore(&wifiSemaphore);
+        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
+        G8RTOS_SignalSemaphore(&wifiSemaphore);
 
         sleep(5);
     }
@@ -365,7 +365,11 @@ void GenerateBall()
         {
             sprintf(ballName, "%d", gameState.numberOfBalls); // int to string, stores in char array
             G8RTOS_AddThread(MoveBall, 5, "ball");
+
+            G8RTOS_WaitSemaphore(&playerSemaphore);
             gameState.numberOfBalls++;
+            G8RTOS_SignalSemaphore(&playerSemaphore);
+
             if(sleepDuration < 0)
                 sleepDuration = 5000;
             else
@@ -387,9 +391,14 @@ void ReadJoystickHost()
         GetJoystickCoordinates(&x_coord, &y_coord);
 
         // change displacement
+        G8RTOS_WaitSemaphore(&playerSemaphore);
         gameState.player.displacement = (x_coord >> JOYSTICK_DIV);
+        G8RTOS_SignalSemaphore(&playerSemaphore);
+
+        sleep(10);
 
         // then add to bottom player
+        G8RTOS_WaitSemaphore(&playerSemaphore);
         gameState.players[Host].currentCenter -= (x_coord >> JOYSTICK_DIV);
 
         // check bounds, change center accordingly
@@ -398,7 +407,7 @@ void ReadJoystickHost()
         else if(gameState.players[Host].currentCenter > HORIZ_CENTER_MAX_PL)
             gameState.players[Host].currentCenter = HORIZ_CENTER_MAX_PL;
 
-        sleep(10);
+        G8RTOS_SignalSemaphore(&playerSemaphore);
     }
 }
 
@@ -479,13 +488,18 @@ void MoveBall()
         }
     }
 
+    G8RTOS_WaitSemaphore(&playerSemaphore);
+
     gameState.balls[index].currentCenterX = (ARENA_MIN_X + BALL_SIZE_D2) + (rand() % (ARENA_MAX_X - BALL_SIZE_D2));
     gameState.balls[index].currentCenterY = rand() % (ARENA_MAX_Y - BALL_SIZE_D2);
     gameState.balls[index].color = LCD_WHITE;
     gameState.balls[index].alive = true;
 
+    G8RTOS_SignalSemaphore(&playerSemaphore);
+
     while(1)
     {
+        G8RTOS_WaitSemaphore(&playerSemaphore);
         // add amount moved
         gameState.balls[index].currentCenterX += xVelocity;
         gameState.balls[index].currentCenterY += yVelocity;
@@ -505,16 +519,26 @@ void MoveBall()
             gameState.balls[index].currentCenterX += (-xVelocity);
             xVelocity = -xVelocity;
         }
-        else if((gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE - BALL_SIZE_D2) && gameState.balls[index].alive)
+//        else if((gameState.balls[index].currentCenterY <= TOP_PADDLE_EDGE + BALL_SIZE_D2) && gameState.balls[index].alive)
+//        {
+//            if(CollisionDetect(TOP, index))
+//            {
+//                gameState.balls[index].color = gameState.players[TOP].color;
+//                gameState.balls[index].currentCenterY = TOP_PADDLE_EDGE + BALL_SIZE;
+//                gameState.balls[index].currentCenterY += (-yVelocity);
+//
+//                yVelocity = -yVelocity;
+//            }
+//        }
+        else if((gameState.balls[index].currentCenterY < TOP_PADDLE_EDGE - BALL_SIZE) && gameState.balls[index].alive)
         {
             // top border
-//            bool ret = CollisionDetect(TOP, index);
 
             // if collision occurs, adject ball's velocity and color
             if(CollisionDetect(TOP, index))
             {
                 gameState.balls[index].color = gameState.players[TOP].color;
-                gameState.balls[index].currentCenterY = TOP_PADDLE_EDGE - BALL_SIZE_D2;
+                gameState.balls[index].currentCenterY = TOP_PADDLE_EDGE + BALL_SIZE;
                 gameState.balls[index].currentCenterY += (-yVelocity);
 
                 yVelocity = -yVelocity;
@@ -525,19 +549,37 @@ void MoveBall()
                 gameState.balls[index].alive = false;
                 gameState.numberOfBalls--;
                 LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+
+                // account for win/lose
+                if(gameState.LEDScores[BOTTOM] >= 8)
+                {
+                    gameState.winner = BOTTOM;
+                    gameState.gameDone = true;
+                }
+                G8RTOS_SignalSemaphore(&playerSemaphore);
                 G8RTOS_KillSelf();
             }
         }
-        else if((gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE + BALL_SIZE_D2) && gameState.balls[index].alive)
+//        else if((gameState.balls[index].currentCenterY >= BOTTOM_PADDLE_EDGE - BALL_SIZE_D2) && gameState.balls[index].alive)
+//        {
+//            if(CollisionDetect(BOTTOM, index))
+//            {
+//                gameState.balls[index].color = gameState.players[BOTTOM].color;
+//                gameState.balls[index].currentCenterY = BOTTOM_PADDLE_EDGE - BALL_SIZE;
+//                gameState.balls[index].currentCenterY += (-yVelocity);
+//
+//                yVelocity = -yVelocity;
+//            }
+//        }
+        else if((gameState.balls[index].currentCenterY > BOTTOM_PADDLE_EDGE + BALL_SIZE) && gameState.balls[index].alive)
         {
             // bottom border
-//            bool ret = CollisionDetect(BOTTOM, index);
 
             // if collision occurs, adject ball's velocity and color
             if(CollisionDetect(BOTTOM, index))
             {
                 gameState.balls[index].color = gameState.players[BOTTOM].color;
-                gameState.balls[index].currentCenterY = BOTTOM_PADDLE_EDGE + BALL_SIZE_D2;
+                gameState.balls[index].currentCenterY = BOTTOM_PADDLE_EDGE - BALL_SIZE;
                 gameState.balls[index].currentCenterY += (-yVelocity);
 
                 yVelocity = -yVelocity;
@@ -548,9 +590,19 @@ void MoveBall()
                 gameState.balls[index].alive = false;
                 gameState.numberOfBalls--;
                 LCD_DrawRectangle(gameState.balls[index].currentCenterX - BALL_SIZE_D2, gameState.balls[index].currentCenterX + BALL_SIZE_D2, gameState.balls[index].currentCenterY - BALL_SIZE_D2, gameState.balls[index].currentCenterY + BALL_SIZE_D2, LCD_BLACK);
+
+                // account for win/lose
+                if(gameState.LEDScores[TOP] >= 8)
+                {
+                    gameState.winner = TOP;
+                    gameState.gameDone = true;
+                }
+                G8RTOS_SignalSemaphore(&playerSemaphore);
                 G8RTOS_KillSelf();
             }
         }
+        G8RTOS_SignalSemaphore(&playerSemaphore);
+
         sleep(35);
     }
 }
@@ -561,26 +613,48 @@ void MoveBall()
 void EndOfGameHost()
 {
     // wait for all semaphores
-    G8RTOS_WaitSemaphore(&ledSemaphore);
+//    G8RTOS_WaitSemaphore(&ledSemaphore);
     G8RTOS_WaitSemaphore(&wifiSemaphore);
     G8RTOS_WaitSemaphore(&lcdSemaphore);
+    G8RTOS_WaitSemaphore(&playerSemaphore);
 
     // kill all threads
     G8RTOS_KillOthers();
 
-    // clear screen with winner's color
-    if(gameState.winner == Client)
-        LCD_Clear(gameState.players[Client].color);
-    else if(gameState.winner == Host)
-        LCD_Clear(gameState.players[Host].color);
-
-    // wait for Host action to restart game
-    while(1); // <-- to add
-
     // re-init semaphores
-    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+//    G8RTOS_InitSemaphore(&ledSemaphore, 1);
     G8RTOS_InitSemaphore(&wifiSemaphore, 1);
     G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&playerSemaphore, 1);
+
+    // clear screen with winner's color
+    if(gameState.winner == Client)
+    {
+        LCD_Clear(gameState.players[Client].color);
+        LCD_Text(50, 50, "Client won!", LCD_WHITE);
+    }
+    else if(gameState.winner == Host)
+    {
+        LCD_Clear(gameState.players[Host].color);
+        LCD_Text(50, 50, "Host won!", LCD_WHITE);
+    }
+
+    InitGameVariablesHost();
+
+    // wait for Host action to restart game
+    LCD_Clear(BACK_COLOR);
+    LCD_Text(50, 50, "Wait to restart game", LCD_WHITE); //?
+
+    // enable interrupts for button presses again
+//    GPIO_enableInterrupt(GPIO_PORT_P4, GPIO_PIN4);
+//    GPIO_enableInterrupt(GPIO_PORT_P5, GPIO_PIN4);
+
+    // wait for Host to signify it's ready to Client
+    while(!clientInfo.ready) // client needs to send this or something
+    {
+        SendData(&gameState, clientInfo.IP_address, sizeof(gameState));
+        ReceiveData(&clientInfo, sizeof(clientInfo));
+    }
 
     // add threads
     G8RTOS_AddThread(GenerateBall, 2, "gen_ball");
@@ -590,10 +664,6 @@ void EndOfGameHost()
     G8RTOS_AddThread(ReceiveDataFromClient, 2, "recvDataClient");
     G8RTOS_AddThread(MoveLEDs, 2, "leds");
     G8RTOS_AddThread(IdleThread, 6, "idle");
-
-    // enable interrupts for button presses again
-    GPIO_enableInterrupt(GPIO_PORT_P4, GPIO_PIN4);
-    GPIO_enableInterrupt(GPIO_PORT_P5, GPIO_PIN4);
 
     G8RTOS_KillSelf();
 }
@@ -615,6 +685,9 @@ void IdleThread()
  */
 void DrawObjects()
 {
+    G8RTOS_WaitSemaphore(&lcdSemaphore);
+    G8RTOS_WaitSemaphore(&playerSemaphore);
+
     // init prev balls
     PrevBall_t prevBalls[MAX_NUM_OF_BALLS];
     int i;
@@ -629,9 +702,13 @@ void DrawObjects()
     prevPlayers[Host].Center = gameState.players[Host].currentCenter;
     prevPlayers[Client].Center = gameState.players[Client].currentCenter;
 
+    G8RTOS_SignalSemaphore(&lcdSemaphore);
+    G8RTOS_SignalSemaphore(&playerSemaphore);
+
     while(1)
     {
         G8RTOS_WaitSemaphore(&lcdSemaphore);
+        G8RTOS_WaitSemaphore(&playerSemaphore);
 
         // clear prev ball locations
         int j;
@@ -661,6 +738,8 @@ void DrawObjects()
         prevPlayers[BOTTOM].Center = gameState.players[BOTTOM].currentCenter;
 
         G8RTOS_SignalSemaphore(&lcdSemaphore);
+        G8RTOS_SignalSemaphore(&playerSemaphore);
+
         sleep(20);
     }
 
@@ -674,24 +753,24 @@ void MoveLEDs()
 {
     while(1)
     {
-        G8RTOS_WaitSemaphore(&ledSemaphore);
+//        G8RTOS_WaitSemaphore(&ledSemaphore);
 
         if(gameState.LEDScores[Host] == 0)
             LP3943_LedModeSet(BLUE, 0x0000);
         else if(gameState.LEDScores[Host] == 1)
-            LP3943_LedModeSet(BLUE, 0x0010);
+            LP3943_LedModeSet(BLUE, 0x0080);
         else if(gameState.LEDScores[Host] == 2)
-            LP3943_LedModeSet(BLUE, 0x0030);
+            LP3943_LedModeSet(BLUE, 0x00C0);
         else if(gameState.LEDScores[Host] == 3)
-            LP3943_LedModeSet(BLUE, 0x0070);
+            LP3943_LedModeSet(BLUE, 0x00E0);
         else if(gameState.LEDScores[Host] == 4)
             LP3943_LedModeSet(BLUE, 0x00F0);
         else if(gameState.LEDScores[Host] == 5)
-            LP3943_LedModeSet(BLUE, 0x00F1);
+            LP3943_LedModeSet(BLUE, 0x00F8);
         else if(gameState.LEDScores[Host] == 6)
-            LP3943_LedModeSet(BLUE, 0x00F3);
+            LP3943_LedModeSet(BLUE, 0x00FC);
         else if(gameState.LEDScores[Host] == 7)
-            LP3943_LedModeSet(BLUE, 0x00F7);
+            LP3943_LedModeSet(BLUE, 0x00FE);
         else if(gameState.LEDScores[Host] >= 8)
             LP3943_LedModeSet(BLUE, 0x00FF);
 
@@ -714,7 +793,7 @@ void MoveLEDs()
         else if(gameState.LEDScores[Client] >= 8)
             LP3943_LedModeSet(RED, 0xFF00);
 
-        G8RTOS_SignalSemaphore(&ledSemaphore);
+//        G8RTOS_SignalSemaphore(&ledSemaphore);
         sleep(10); // idk if needed?
     }
 }
@@ -821,7 +900,7 @@ void InitBoardState()
     LCD_DrawRectangle(ARENA_MIN_X - 5, ARENA_MIN_X, ARENA_MIN_Y, ARENA_MAX_Y, LCD_WHITE);
     LCD_DrawRectangle(ARENA_MAX_X, ARENA_MAX_X + 5, ARENA_MIN_Y, ARENA_MAX_Y, LCD_WHITE);
 
-    // print scores
+    // print starting scores
     char score[4];
     sprintf(score, "%d", gameState.LEDScores[Host]);
     LCD_Text(0, ARENA_MIN_Y + 5, score, gameState.players[Host].color);

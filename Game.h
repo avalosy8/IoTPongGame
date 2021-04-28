@@ -187,6 +187,7 @@ typedef struct
 semaphore_t wifiSemaphore;
 semaphore_t lcdSemaphore;
 semaphore_t ledSemaphore;
+semaphore_t playerSemaphore;
 
 GameState_t gameState;
 //GeneralPlayerInfo_t playerInfo;
