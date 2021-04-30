@@ -1,5 +1,5 @@
 #include "msp.h"
-#include "Threads.h"
+//#include "Threads.h"
 #include "Game.h"
 #include <driverlib.h>
 
@@ -21,10 +21,18 @@ void main(void)
     G8RTOS_Init();
 
     BSP_InitBoard();
-    LCD_Init(true);
+    LCD_Init(false);
 
     // get player role
     playerType player = GetPlayerRole();
+
+    initCC3100(player);
+
+    /*G8RTOS_InitSemaphore(&wifiSemaphore, 1);
+    G8RTOS_InitSemaphore(&lcdSemaphore, 1);
+    G8RTOS_InitSemaphore(&ledSemaphore, 1);
+    G8RTOS_InitSemaphore(&playerSemaphore, 1);*/
+
     if(player == Host)
         G8RTOS_AddThread(CreateGame, 5, "create");
 //        CreateGame();
